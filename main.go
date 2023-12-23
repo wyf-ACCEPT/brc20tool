@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -9,7 +10,6 @@ import (
 	"github.com/minchenzz/brc20tool/pkg/btcapi/mempool"
 
 	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 	"github.com/btcsuite/btcd/btcec/v2"
@@ -18,6 +18,7 @@ import (
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
+	"github.com/joho/godotenv"
 )
 
 var gwif string
@@ -30,12 +31,40 @@ var (
 )
 
 func main() {
-	a := app.New()
-	w := a.NewWindow("brc20 tool")
-	w.Resize(fyne.NewSize(800, 600))
-	// w.SetContent(widget.NewLabel("Hello World!"))
-	w.SetContent(makeForm(w))
-	w.ShowAndRun()
+	fmt.Println("============ brc20 tool ============")
+
+	err := godotenv.Load()
+	if err != nil {
+		fmt.Println("Error loading .env file")
+		return
+	}
+
+	gwif = os.Getenv("PK")
+	if gwif == "" {
+		fmt.Println("Environment variable not found")
+		return
+	}
+
+	gop = "mint"
+	gtick = "omni"
+	gamount = "100"
+	grepeat = "2"
+	gsats = "2"
+
+	simulate := false
+	txid, txids, fee, err := run(simulate)
+
+	fmt.Println("\n[INFO] transactions (if not simulating):")
+	fmt.Println("prepare utxo txid:", txid)
+	fmt.Println("inscription txids:", txids)
+	fmt.Println("fee:", fee)
+
+	// a := app.New()
+	// w := a.NewWindow("brc20 tool")
+	// w.Resize(fyne.NewSize(800, 600))
+	// // w.SetContent(widget.NewLabel("Hello World!"))
+	// w.SetContent(makeForm(w))
+	// w.ShowAndRun()
 }
 
 func makeForm(_w fyne.Window) fyne.CanvasObject {
@@ -120,60 +149,75 @@ func makeForm(_w fyne.Window) fyne.CanvasObject {
 }
 
 func run(forEstimate bool) (txid string, txids []string, fee int64, err error) {
-	netParams := &chaincfg.MainNetParams
+	// ------------------- Log the basic information -------------------
+	fmt.Println("\n[INFO] constructing tx...")
+	fmt.Println("simulating:", forEstimate)
+
+	// ------------------- Define network parameters -------------------
+	netParams := &chaincfg.SigNetParams
 	btcApiClient := mempool.NewClient(netParams)
 	wifKey, err := btcutil.DecodeWIF(gwif)
 	if err != nil {
 		return
 	}
+	fmt.Println("net:", netParams.Name)
+
+	// ------------------- Load the address -------------------
 	utxoTaprootAddress, err := btcutil.NewAddressTaproot(schnorr.SerializePubKey(txscript.ComputeTaprootKeyNoScript(wifKey.PrivKey.PubKey())), netParams)
 	if err != nil {
 		return
 	}
+	fmt.Println("utxo address:", utxoTaprootAddress.EncodeAddress())
+
+	// --------------------- Collect UTXOs ---------------------
 	unspentList, err := btcApiClient.ListUnspent(utxoTaprootAddress)
 	if err != nil {
 		return
 	}
-
 	if len(unspentList) == 0 {
 		err = fmt.Errorf("no utxo for %s", utxoTaprootAddress)
 		return
 	}
-
 	vinAmount := 0
 	commitTxOutPointList := make([]*wire.OutPoint, 0)
 	commitTxPrivateKeyList := make([]*btcec.PrivateKey, 0)
+	utxoValues := make([]string, len(unspentList))
 	for i := range unspentList {
+		utxoValues[i] = fmt.Sprintf("%d", unspentList[i].Output.Value)
 		if unspentList[i].Output.Value < 10000 {
+			utxoValues[i] = fmt.Sprintf("%s (unusable)", utxoValues[i])
 			continue
 		}
 		commitTxOutPointList = append(commitTxOutPointList, unspentList[i].Outpoint)
 		commitTxPrivateKeyList = append(commitTxPrivateKeyList, wifKey.PrivKey)
 		vinAmount += int(unspentList[i].Output.Value)
 	}
+	fmt.Println("utxo count:", len(unspentList))
+	fmt.Println("utxo value list: [", strings.Join(utxoValues, ", "), "]")
 
+	// --------------- Construct the inscription data ---------------
 	dataList := make([]ord.InscriptionData, 0)
-
+	ordinalText := fmt.Sprintf(`{"p":"brc-20","op":"%s","tick":"%s","amt":"%s"}`, gop, gtick, gamount)
 	mint := ord.InscriptionData{
 		ContentType: "text/plain;charset=utf-8",
-		Body:        []byte(fmt.Sprintf(`{"p":"brc-20","op":"%s","tick":"%s","amt":"%s"}`, gop, gtick, gamount)),
+		Body:        []byte(ordinalText),
 		Destination: utxoTaprootAddress.EncodeAddress(),
 	}
-
 	count, err := strconv.Atoi(grepeat)
 	if err != nil {
 		return
 	}
-
 	for i := 0; i < count; i++ {
 		dataList = append(dataList, mint)
 	}
+	fmt.Println("inscription text:", ordinalText)
+	fmt.Println("repeat mint times: ", len(dataList))
 
+	// --------------- Construct the inscription request ---------------
 	txFee, err := strconv.Atoi(gsats)
 	if err != nil {
 		return
 	}
-
 	request := ord.InscriptionRequest{
 		CommitTxOutPointList:   commitTxOutPointList,
 		CommitTxPrivateKeyList: commitTxPrivateKeyList,
@@ -183,24 +227,26 @@ func run(forEstimate bool) (txid string, txids []string, fee int64, err error) {
 		SingleRevealTxOnly:     false,
 	}
 
+	// ----------------- Prepare the inscription tool -----------------
+	fmt.Println("current balance:", float32(vinAmount)/1e8)
+	fmt.Print("total spent fee: ")
 	tool, err := ord.NewInscriptionToolWithBtcApiClient(netParams, btcApiClient, &request)
 	if err != nil {
+		fmt.Println("new tool err: ", err)
 		return
 	}
-
-	baseFee := tool.CalculateFee()
-
+	fee = tool.CalculateFee()
+	fmt.Println("balance after inscription:", (float32(vinAmount)-float32(fee))/1e8)
 	if forEstimate {
-		fee = baseFee
 		return
 	}
 
+	// ------------------- Submit the transaction -------------------
 	commitTxHash, revealTxHashList, _, _, err := tool.Inscribe()
 	if err != nil {
 		err = fmt.Errorf("send tx errr, %v", err)
 		return
 	}
-
 	txid = commitTxHash.String()
 	for i := range revealTxHashList {
 		txids = append(txids, revealTxHashList[i].String())
