@@ -9,9 +9,6 @@ import (
 	"github.com/minchenzz/brc20tool/internal/ord"
 	"github.com/minchenzz/brc20tool/pkg/btcapi/mempool"
 
-	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/dialog"
-	"fyne.io/fyne/v2/widget"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/btcutil"
@@ -21,14 +18,7 @@ import (
 	"github.com/joho/godotenv"
 )
 
-var gwif string
-var (
-	gop     string
-	gtick   string
-	gamount string
-	grepeat string
-	gsats   string
-)
+var privateKey string
 
 func main() {
 	fmt.Println("============ brc20 tool ============")
@@ -39,124 +29,41 @@ func main() {
 		return
 	}
 
-	gwif = os.Getenv("PK")
-	if gwif == "" {
+	privateKey = os.Getenv("PK")
+	if privateKey == "" {
 		fmt.Println("Environment variable not found")
 		return
 	}
 
-	gop = "mint"
-	gtick = "omni"
-	gamount = "100"
-	grepeat = "2"
-	gsats = "2"
+	forEstimate := true
+	brc20op := "mint"
+	brc20tick := "omni"
+	brc20amt := "100"
+	brc20repeat := "2"
+	feePerBytes := "2"
 
-	simulate := false
-	txid, txids, fee, err := run(simulate)
+	txid, txids, fee, err := constructBRC20(forEstimate, brc20op, brc20tick, brc20amt, brc20repeat, feePerBytes)
+
+	if err != nil {
+		fmt.Println("Error in running:", err)
+		return
+	}
 
 	fmt.Println("\n[INFO] transactions (if not simulating):")
 	fmt.Println("prepare utxo txid:", txid)
 	fmt.Println("inscription txids:", txids)
 	fmt.Println("fee:", fee)
-
-	// a := app.New()
-	// w := a.NewWindow("brc20 tool")
-	// w.Resize(fyne.NewSize(800, 600))
-	// // w.SetContent(widget.NewLabel("Hello World!"))
-	// w.SetContent(makeForm(w))
-	// w.ShowAndRun()
 }
 
-func makeForm(_w fyne.Window) fyne.CanvasObject {
-	pk := widget.NewPasswordEntry()
-
-	op := widget.NewEntry()
-	op.SetPlaceHolder("op")
-
-	tick := widget.NewEntry()
-	tick.SetPlaceHolder("tick")
-
-	amount := widget.NewEntry()
-	amount.SetPlaceHolder("amount")
-
-	fee := widget.NewEntry()
-	fee.SetPlaceHolder("sats")
-	fee.SetText("20")
-
-	repeat := widget.NewEntry()
-	repeat.SetPlaceHolder("repeat")
-	repeat.SetText("1")
-
-	fees := widget.NewEntry()
-	fees.SetPlaceHolder("fees")
-
-	txid := widget.NewEntry()
-	txid.SetPlaceHolder("main txid")
-
-	inscribeTxs := widget.NewEntry()
-	inscribeTxs.SetPlaceHolder("inscribe txs")
-	inscribeTxs.MultiLine = true
-
-	estimate := widget.NewButton("estimate", func() {
-		gwif = pk.Text
-		gop = op.Text
-		gtick = tick.Text
-		gamount = amount.Text
-		grepeat = repeat.Text
-		gsats = fee.Text
-
-		_, _, fee, err := run(true)
-		if err != nil {
-			dialog.ShowError(err, _w)
-			return
-		}
-		fees.SetText(strconv.FormatInt(fee, 10))
-	})
-
-	form := &widget.Form{
-		Items: []*widget.FormItem{
-			{Text: "private key", Widget: pk, HintText: "Your wif private key"},
-			{Text: "op", Widget: op, HintText: "eg: mint, transfer"},
-			{Text: "tick", Widget: tick, HintText: "eg: ordi, SHIB"},
-			{Text: "amount", Widget: amount, HintText: "eg: 1, 100000"},
-			{Text: "sats", Widget: fee, HintText: "eg: 20, 30"},
-			{Text: "repeat", Widget: repeat, HintText: "eg: 1, 5, 10"},
-			{Text: "estimate fee", Widget: estimate, HintText: "estimate fee(sats)"},
-			{Text: "fee", Widget: fees, HintText: "txs fee"},
-			{Text: "txid", Widget: txid, HintText: "main txid"},
-			{Text: "inscribe txids", Widget: inscribeTxs, HintText: "inscribe txids"},
-		},
-		OnSubmit: func() {
-			gwif = pk.Text
-			gop = op.Text
-			gtick = tick.Text
-			gamount = amount.Text
-			grepeat = repeat.Text
-			gsats = fee.Text
-
-			_txid, txids, _, err := run(false)
-			if err != nil {
-				dialog.ShowError(err, _w)
-				return
-			}
-			txid.SetText(_txid)
-			txisstr := strings.Join(txids, "\n")
-			inscribeTxs.SetText(txisstr)
-		},
-	}
-
-	return form
-}
-
-func run(forEstimate bool) (txid string, txids []string, fee int64, err error) {
+func constructBRC20(forEstimate bool, brc20op string, brc20tick string, brc20amt string, brc20repeat string, feePerBytes string) (txid string, txids []string, fee int64, err error) {
 	// ------------------- Log the basic information -------------------
 	fmt.Println("\n[INFO] constructing tx...")
-	fmt.Println("simulating:", forEstimate)
+	fmt.Println("is simulate:", forEstimate)
 
 	// ------------------- Define network parameters -------------------
 	netParams := &chaincfg.SigNetParams
 	btcApiClient := mempool.NewClient(netParams)
-	wifKey, err := btcutil.DecodeWIF(gwif)
+	wifKey, err := btcutil.DecodeWIF(privateKey)
 	if err != nil {
 		return
 	}
@@ -197,13 +104,13 @@ func run(forEstimate bool) (txid string, txids []string, fee int64, err error) {
 
 	// --------------- Construct the inscription data ---------------
 	dataList := make([]ord.InscriptionData, 0)
-	ordinalText := fmt.Sprintf(`{"p":"brc-20","op":"%s","tick":"%s","amt":"%s"}`, gop, gtick, gamount)
+	ordinalText := fmt.Sprintf(`{"p":"brc-20","op":"%s","tick":"%s","amt":"%s"}`, brc20op, brc20tick, brc20amt)
 	mint := ord.InscriptionData{
 		ContentType: "text/plain;charset=utf-8",
 		Body:        []byte(ordinalText),
 		Destination: utxoTaprootAddress.EncodeAddress(),
 	}
-	count, err := strconv.Atoi(grepeat)
+	count, err := strconv.Atoi(brc20repeat)
 	if err != nil {
 		return
 	}
@@ -214,7 +121,7 @@ func run(forEstimate bool) (txid string, txids []string, fee int64, err error) {
 	fmt.Println("repeat mint times: ", len(dataList))
 
 	// --------------- Construct the inscription request ---------------
-	txFee, err := strconv.Atoi(gsats)
+	txFee, err := strconv.Atoi(feePerBytes)
 	if err != nil {
 		return
 	}
