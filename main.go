@@ -68,7 +68,8 @@ func main() {
 		fmt.Println("\n------------------ transactions info ------------------")
 		fmt.Println("prepare utxo txid:", txid)
 		fmt.Println("inscription txids:", txids)
-		fmt.Println("fee:", fee)
+		fmt.Println("fee spent        :", fee)
+		fmt.Println("view on mempool  : https://mempool.space/signet/tx/" + txid)
 	}
 }
 
