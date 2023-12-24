@@ -2,11 +2,15 @@
 
 This is a **BRC20 transaction constructor**, forked from [eastonqiu/brc20tool](https://github.com/eastonqiu/brc20tool/tree/main).
 
+<br>
+
 ## Usage
 
 ### 1. Prepare the environment
 
 You should have [Go](https://golang.org/) installed on your computer. If not, follow this [guidance](https://go.dev/doc/install) to install.
+
+<br>
 
 ### 2. Prepare a wallet
 
@@ -17,6 +21,8 @@ You should fill in the `.env` file like this:
 ```bash
 PK="1111YourPrivateKeyIsABase58EncodedStringWithLength52"
 ```
+
+<br>
 
 ### 3. Run the script
 
