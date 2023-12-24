@@ -37,7 +37,8 @@ func main() {
 
 	// ------------------- Parse the brc20 params -------------------
 	forEstimate := flag.Bool("simulate", false, "Whether to simulate the transaction (true/false). Default is false.")
-	brc20op := flag.String("op", "", "BRC20 operation (e.g., `mint`, `transfer` or `deploy`).")
+	network := flag.String("network", "signet", "Bitcoin network (e.g., `mainnet`, `testnet` or `signet`). Default is `signet`.")
+	brc20op := flag.String("op", "", "BRC20 operation (e.g., `mint` or `transfer`).")
 	brc20tick := flag.String("tick", "", "BRC20 ticker symbol (e.g., `ordi`).")
 	brc20amt := flag.String("amt", "", "BRC20 amount (e.g., 100).")
 	brc20repeat := flag.Int("repeat", 1, "Number of times to repeat the operation. Default is 1.")
@@ -57,7 +58,7 @@ func main() {
 
 	// ------------------- Construct the transaction -------------------
 	fmt.Println("\n-------------- construct the transaction --------------")
-	txid, txids, fee, err := constructBRC20(*forEstimate, *brc20op, *brc20tick, *brc20amt, *brc20repeat, *feePerBytes)
+	txid, txids, fee, err := constructBRC20(*forEstimate, *network, *brc20op, *brc20tick, *brc20amt, *brc20repeat, *feePerBytes)
 
 	if err != nil {
 		fmt.Println("Error in running:", err)
@@ -77,8 +78,8 @@ func checkParamsForBRC20(brc20op *string, brc20tick *string, brc20amt *string) b
 	if *brc20op == "" {
 		fmt.Println("Error: arg --op is required. ")
 		return true
-	} else if *brc20op != "mint" && *brc20op != "transfer" && *brc20op != "deploy" {
-		fmt.Println("Error: arg --op must be `mint`, `transfer` or `deploy`. ")
+	} else if *brc20op != "mint" && *brc20op != "transfer" { // && *brc20op != "deploy" { (TODO here)
+		fmt.Println("Error: arg --op must be `mint` or `transfer`. ")
 		return true
 	} else if *brc20tick == "" {
 		fmt.Println("Error: arg --tick is required. ")
@@ -90,12 +91,22 @@ func checkParamsForBRC20(brc20op *string, brc20tick *string, brc20amt *string) b
 	return false
 }
 
-func constructBRC20(forEstimate bool, brc20op string, brc20tick string, brc20amt string, brc20repeat int, feePerBytes int) (txid string, txids []string, fee int64, err error) {
-	// ------------------- Log the basic information -------------------
+func constructBRC20(forEstimate bool, network string, brc20op string, brc20tick string, brc20amt string, brc20repeat int, feePerBytes int) (txid string, txids []string, fee int64, err error) {
+	// ------------------- Log the network parameters -------------------
 	fmt.Println("is simulate:", forEstimate)
 
-	// ------------------- Define network parameters -------------------
-	netParams := &chaincfg.SigNetParams
+	var netParams *chaincfg.Params
+	if network == "mainnet" {
+		netParams = &chaincfg.MainNetParams
+	} else if network == "testnet" {
+		netParams = &chaincfg.TestNet3Params
+	} else if network == "signet" {
+		netParams = &chaincfg.SigNetParams
+	} else {
+		err = fmt.Errorf("unknown network: %s", network)
+		return
+	}
+
 	btcApiClient := mempool.NewClient(netParams)
 	wifKey, err := btcutil.DecodeWIF(privateKey)
 	if err != nil {
