@@ -4,7 +4,11 @@ This is a **BRC20 transaction constructor**, forked from [eastonqiu/brc20tool](h
 
 ## Usage
 
-### 1. Prepare a wallet
+### 1. Prepare the environment
+
+You should have [Go](https://golang.org/) installed on your computer. If not, follow this [guidance](https://go.dev/doc/install) to install.
+
+### 2. Prepare a wallet
 
 You can use [Unisat](https://unisat.io/) to create a wallet, and switch to Signet network for test. Use [this faucet](https://signet.bc-2.jp/) to get some Signet BTC. Remeber to create a `.env` file and put your wallet's private key in it.
 
@@ -14,7 +18,7 @@ You should fill in the `.env` file like this:
 PK="1111YourPrivateKeyIsABase58EncodedStringWithLength52"
 ```
 
-### 2. Run the script
+### 3. Run the script
 
 You can deliver your BRC20 params into as command line arguments. For example:
 

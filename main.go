@@ -65,12 +65,21 @@ func main() {
 		return
 	}
 
+	var urlSuffix string
+	if *network == "mainnet" {
+		urlSuffix = ""
+	} else if *network == "testnet" {
+		urlSuffix = "testnet/"
+	} else if *network == "signet" {
+		urlSuffix = "signet/"
+	}
+
 	if !*forEstimate {
 		fmt.Println("\n------------------ transactions info ------------------")
 		fmt.Println("prepare utxo txid:", txid)
 		fmt.Println("inscription txids:", txids)
 		fmt.Println("fee spent        :", fee)
-		fmt.Println("view on mempool  : https://mempool.space/signet/tx/" + txid)
+		fmt.Printf("view on mempool   : https://mempool.space/%stx/%s\n", urlSuffix, txid)
 	}
 }
 
